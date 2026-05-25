@@ -27,6 +27,7 @@ Thumbs.db
 # Logs / runtime (future IB session state)
 logs/*.log
 data/
+state/
 
 # Secrets — never commit
 .env

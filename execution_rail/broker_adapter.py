@@ -15,11 +15,26 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .broker_protocol import ExitResult, OrderResult  # re-export for import back-compat
-
-__all__ = ["PaperBroker", "OrderResult", "ExitResult"]
+from .broker_protocol import (
+    CloseFillEvent,
+    ExitResult,
+    FillEvent,
+    OrderIntent,
+    OrderResult,
+    PositionSnapshot,
+)
 from .halt_types import HaltChecker
 from .position import Position, PositionState
+
+
+VALID_DIRECTIONS = frozenset({"LONG", "SHORT"})
+
+
+def _normalize_direction(direction: str) -> str:
+    normalized = direction.upper()
+    if normalized not in VALID_DIRECTIONS:
+        raise ValueError(f"direction must be LONG or SHORT, got {direction!r}")
+    return normalized
 
 
 class PaperBroker:
@@ -33,15 +48,24 @@ class PaperBroker:
     def _check_halt(self) -> None:
         self._halt.check()
 
+    def submit_intent(self, intent: OrderIntent) -> FillEvent:
+        return self.open_position(
+            intent.symbol,
+            intent.direction,
+            intent.size,
+            intent.entry_price,
+        )
+
     def open_position(
         self,
         symbol: str,
         direction: str,
         size: float,
         entry_price: float,
-    ) -> OrderResult:
+    ) -> FillEvent:
         """Open a new position with immediate fill."""
         self._check_halt()
+        direction = _normalize_direction(direction)
         self._counter += 1
         now = datetime.now(UTC)
         position_id = f"POS-{now.strftime('%Y%m%d%H%M%S')}-{self._counter:04d}"
@@ -66,7 +90,7 @@ class PaperBroker:
         position_id: str,
         exit_price: float,
         reason: str = "exit",
-    ) -> ExitResult:
+    ) -> CloseFillEvent:
         """Close a position at the given price."""
         self._check_halt()
         position = self._positions.get(position_id)
@@ -82,6 +106,15 @@ class PaperBroker:
             exit_price=exit_price, realized_pnl=position.realized_pnl,
         )
 
+    def snapshot(self) -> PositionSnapshot:
+        pnl = self.get_total_pnl()
+        return PositionSnapshot(
+            positions=[p.to_dict() for p in self._positions.values()],
+            realized=pnl["realized"],
+            unrealized=pnl["unrealized"],
+            total=pnl["total"],
+        )
+
     def halt_all(self, halt_id: str) -> int:
         count = 0
         for p in self._positions.values():
@@ -94,3 +127,14 @@ class PaperBroker:
         realized = sum(p.realized_pnl for p in self._positions.values())
         unrealized = sum(p.unrealized_pnl for p in self._positions.values())
         return {"realized": realized, "unrealized": unrealized, "total": realized + unrealized}
+
+
+__all__ = [
+    "CloseFillEvent",
+    "ExitResult",
+    "FillEvent",
+    "OrderIntent",
+    "OrderResult",
+    "PaperBroker",
+    "PositionSnapshot",
+]

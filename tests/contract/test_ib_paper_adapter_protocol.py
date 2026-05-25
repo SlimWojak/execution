@@ -10,6 +10,7 @@ from execution_rail.broker_protocol import BrokerAdapter
 from execution_rail.ib.config import IBKRConfig, IBKRMode
 from execution_rail.ib.paper_adapter import IBPaperAdapter
 from execution_rail.mode import OperatingMode
+from execution_rail.mode_promotion import grant_mode
 
 
 class _NoHalt:
@@ -27,8 +28,9 @@ def test_ti08_protocol_satisfied(paper_config):
     assert isinstance(adapter, BrokerAdapter)
 
 
-def test_ti09_factory_paper_returns_ib_adapter(monkeypatch):
-    monkeypatch.setenv("IBKR_MODE", "PAPER")
+def test_ti09_factory_paper_returns_ib_adapter(monkeypatch, tmp_path):
+    monkeypatch.setenv("EXECUTION_MODE_GRANTS_PATH", str(tmp_path / "mode_grants.jsonl"))
+    grant_mode(OperatingMode.PAPER, reason="test", grantor="pytest")
     broker = build_broker(OperatingMode.PAPER, _NoHalt())
     assert isinstance(broker, IBPaperAdapter)
 

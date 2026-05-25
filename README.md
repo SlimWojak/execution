@@ -99,6 +99,10 @@ Broker uses `IBKRSupervisor` (5s heartbeat, 15s to DEAD). River uses `RiverSuper
 
 Supervisor heartbeat recovery does **not** auto-clear halt. Operator inspects, fixes root cause, clears manually. See `INV-HALT-OVERRIDES-ALL`.
 
+### Mode promotion ledger
+
+`PAPER` construction is gated by `execution_rail/mode_promotion.py`. A current grant in `~/execution/state/mode_grants.jsonl` is required before `build_broker(OperatingMode.PAPER, ...)` or `supervised_paper_session(...)` can create a real IB paper adapter. `LIVE` remains unavailable even if a grant is recorded.
+
 ### On-disk path
 
 Data writes to `~/phoenix-river/` (name is historical; ownership is this repo). Override via `RIVER_ROOT` env var. 19+ en1gma consumers reference this path — rename is a separate migration brief.
@@ -126,6 +130,8 @@ execution/
 │   ├── broker_factory.py           # build_broker() — sole construction site
 │   ├── broker_adapter.py           # PaperBroker (TEST/SHADOW)
 │   ├── halt_types.py               # LocalHaltSignal + HaltSignaler protocol
+│   ├── inspect.py                  # passive runtime inspection surface
+│   ├── mode_promotion.py           # PAPER promotion grant ledger
 │   ├── ib/
 │   │   ├── real_client.py          # sole broker ib_insync surface
 │   │   ├── paper_adapter.py        # IBPaperAdapter (PAPER mode)
@@ -165,7 +171,7 @@ pip install -e ".[dev]"
 
 python run.py --status
 python run.py --health          # TCP on 127.0.0.1:4002 — fails until Gateway up
-pytest                          # 56 pass, 5 skipped (no Gateway needed)
+pytest                          # 70 pass, 5 skipped (no Gateway needed)
 ```
 
 ### Phase 1 — IB Gateway (Layer 1: IBC)
@@ -189,6 +195,12 @@ Full detail: [`docs/runbooks/IB_GATEWAY_OPERATIONS.md`](docs/runbooks/IB_GATEWAY
 Confirms clientId=2 (BROKER) works on shared Gateway.
 
 ```bash
+python - <<'PY'
+from execution_rail.mode import OperatingMode
+from execution_rail.mode_promotion import grant_mode
+grant_mode(OperatingMode.PAPER, reason="broker validation", grantor="operator")
+PY
+
 python drills/ib_paper_validation.py
 python drills/ib_paper_roundtrip.py    # GATE: BUY→SELL round-trip fills
 IBKR_INTEGRATION_TEST=1 pytest tests/integration/test_ib_paper_roundtrip.py -m integration
@@ -253,9 +265,18 @@ IBKR_INTEGRATION_TEST=1 pytest tests/integration/ -m integration
 # supervised broker session (Python)
 from execution_rail.halt_types import LocalHaltSignal
 from execution_rail.ib.session import supervised_paper_session
+from execution_rail.mode import OperatingMode
+from execution_rail.mode_promotion import grant_mode
+
+grant_mode(OperatingMode.PAPER, reason="supervised session", grantor="operator")
 halt = LocalHaltSignal()
 with supervised_paper_session(halt, on_alert=print) as (adapter, sup, wd):
     ...
+
+# candidate_C contract vocabulary
+from execution_rail.broker_protocol import OrderIntent
+fill = adapter.submit_intent(OrderIntent("EURUSD", "LONG", 20_000.0, 0.0))
+snapshot = adapter.snapshot()
 
 # historical backfill (clientId 99)
 from execution_rail.river.writer import RiverWriter
@@ -284,6 +305,7 @@ consolidate_all_pending("EURUSD")
 ## Cross-references
 
 - Shape: `~/constellation/future_scope/candidate_C_integrated_mcp_body.md`
+- Hedge: this rail is candidate-neutral infrastructure even while it occupies candidate_C's `execution_the_capital_path.rail` slot
 - Source lift: `phoenix/river/`, `phoenix/drills/ibkr_paper_*.py`
 - Consumer: en1gma reads `~/phoenix-river/` via `LiveRiverReader`; imports broker via thin wiring brief (not yet done)
 - Secrets: never commit `.env` or Gateway passwords; keychain only

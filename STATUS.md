@@ -14,6 +14,10 @@
 
 Ingest, storage layout, broker connection, and trade execution all live in this repo. en1gma consumes `~/phoenix-river/` read-side only; phoenix is source reference.
 
+The public broker surface now uses candidate_C contract nouns: `OrderIntent`, `FillEvent`, `CloseFillEvent`, and `PositionSnapshot`. Legacy `OrderResult` / `ExitResult` names remain aliases during consumer migration.
+
+`PAPER` construction through the factory or `supervised_paper_session()` requires a mode-promotion grant in `~/execution/state/mode_grants.jsonl`. `LIVE` remains T2-gated and unimplemented.
+
 ## Three-layer resilience
 
 | Layer | Owner | Handles |
@@ -31,6 +35,8 @@ Ingest, storage layout, broker connection, and trade execution all live in this 
 - `supervisor.py` — IBKRSupervisor + Watchdog
 - `config.py` — ReconnectTracker
 - `session.py` — `supervised_paper_session()`
+- `mode_promotion.py` — PAPER grant ledger
+- `inspect.py` — passive runtime status aggregation
 
 ### Brief 4 — `execution_rail/river/`
 
@@ -45,7 +51,7 @@ Ingest, storage layout, broker connection, and trade execution all live in this 
 
 ## Tests
 
-56 unit/contract pass + 5 integration skipped (env-gated)
+70 unit/contract pass + 5 integration skipped (env-gated)
 
 ```bash
 pytest

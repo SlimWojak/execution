@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator
+from dataclasses import replace
+from typing import Callable, Iterator
 
 from execution_rail.halt_types import HaltSignaler
-from execution_rail.ib.config import IBKRConfig
+from execution_rail.ib.config import IBKRConfig, IBKRMode
 from execution_rail.ib.paper_adapter import IBPaperAdapter
 from execution_rail.ib.supervisor import IBKRSupervisor, SupervisorWatchdog, create_ibkr_supervisor
+from execution_rail.mode import OperatingMode
+from execution_rail.mode_promotion import assert_mode_granted
 
 
 @contextmanager
@@ -18,6 +21,7 @@ def supervised_paper_session(
     on_recovery: Callable[[], None] | None = None,
 ) -> Iterator[tuple[IBPaperAdapter, IBKRSupervisor, SupervisorWatchdog]]:
     """Start supervisor + watchdog, yield adapter, clean stop in finally."""
+    assert_mode_granted(OperatingMode.PAPER)
     supervisor, watchdog = create_ibkr_supervisor(
         halt_signal=halt,
         on_alert=on_alert,
@@ -27,7 +31,9 @@ def supervised_paper_session(
     watchdog.start()
     if on_alert:
         on_alert("SUPERVISOR_STARTED", "layer-2 active")
-    adapter = IBPaperAdapter(halt, IBKRConfig.from_env(), supervisor=supervisor)
+    config = replace(IBKRConfig.from_env(), mode=IBKRMode.PAPER)
+    config._set_mode_defaults()
+    adapter = IBPaperAdapter(halt, config, supervisor=supervisor)
     try:
         yield adapter, supervisor, watchdog
     finally:

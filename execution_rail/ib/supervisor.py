@@ -106,6 +106,10 @@ class IBKRSupervisor:
         elif hb_state == HeartbeatState.ALIVE and current == SupervisorState.ALERTING:
             self._note_recovery()
 
+    def escalate_halt(self, reason: str) -> None:
+        """Public fast path for explicit IB disconnect signals."""
+        self._escalate_halt(reason)
+
     def _escalate_halt(self, reason: str) -> None:
         with self._lock:
             self._state = SupervisorState.ALERTING
@@ -120,7 +124,8 @@ class IBKRSupervisor:
                 self.on_alert(reason, detail)
             except Exception:
                 pass
-        self.halt_signal.signal_local("ib_supervisor", "heartbeat_dead")
+        halt_reason = "heartbeat_dead" if reason == "IBKR_HEARTBEAT_DEAD" else reason.lower()
+        self.halt_signal.signal_local("ib_supervisor", halt_reason)
 
     def _note_recovery(self) -> None:
         with self._lock:

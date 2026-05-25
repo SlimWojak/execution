@@ -1,5 +1,6 @@
 """Heartbeat monitor tests (TS05-TS07)."""
 
+import threading
 import time
 
 from execution_rail.ib.heartbeat import HeartbeatMonitor, HeartbeatState
@@ -30,3 +31,18 @@ def test_ts07_recovery_callback():
     monitor.check()
     monitor.beat()
     assert recovered["called"]
+
+
+def test_get_status_returns_without_deadlock():
+    monitor = HeartbeatMonitor(interval=0.1, miss_threshold=3)
+    monitor.beat()
+    result = {"done": False}
+
+    def read_status() -> None:
+        monitor.get_status()
+        result["done"] = True
+
+    thread = threading.Thread(target=read_status, daemon=True)
+    thread.start()
+    thread.join(0.5)
+    assert result["done"]

@@ -113,9 +113,14 @@ class HeartbeatMonitor:
     def get_status(self) -> dict[str, Any]:
         self.check()
         with self._lock:
+            last_beat_age = (
+                None
+                if self._last_beat_time is None
+                else time.monotonic() - self._last_beat_time
+            )
             return {
                 "state": self._state.value,
-                "last_beat_age": self.last_beat_age,
+                "last_beat_age": last_beat_age,
                 "beat_count": self._beat_count,
                 "missed_beats": self._miss_count,
                 "interval": self.interval,

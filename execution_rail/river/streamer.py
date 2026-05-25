@@ -107,6 +107,21 @@ class RiverStreamer:
     def parquet_path_for(self, dt: datetime) -> Path:
         return parquet_path(self._root, self._pair, dt)
 
+    def get_status(self) -> dict[str, Any]:
+        return {
+            "state": self._state,
+            "connected": self._connected,
+            "subscribed": self._subscribed,
+            "pair": self._pair,
+            "last_bar_time": self._last_bar_time.isoformat() if self._last_bar_time else None,
+            "last_update": datetime.now(UTC).isoformat(),
+            "resubscribe_attempts": self._resubscribe.attempts,
+            "bars_received": self._bars_received,
+            "gaps_detected": self._gaps_detected,
+            "consecutive_good_bars": self._resubscribe.consecutive_good_bars,
+            "session_start": self._session_start.isoformat() if self._session_start else None,
+        }
+
     def start(self) -> None:
         """Start streaming 1m bars from IBKR (blocks until stop)."""
         from ib_insync import IB
@@ -406,26 +421,14 @@ class RiverStreamer:
 
     def _update_heartbeat(self) -> None:
         self.heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(
-            {
-                "state": self._state,
-                "connected": self._connected,
-                "subscribed": self._subscribed,
-                "pair": self._pair,
-                "pairs_active": [self._pair] if self._subscribed else [],
-                "pairs_failed": []
-                if self._subscribed
-                else ([self._pair] if self._state == "DEGRADED" else []),
-                "last_bar_time": self._last_bar_time.isoformat() if self._last_bar_time else None,
-                "last_update": datetime.now(UTC).isoformat(),
-                "resubscribe_attempts": self._resubscribe.attempts,
-                "bars_received": self._bars_received,
-                "gaps_detected": self._gaps_detected,
-                "consecutive_good_bars": self._resubscribe.consecutive_good_bars,
-                "session_start": self._session_start.isoformat() if self._session_start else None,
-            },
-            indent=2,
+        status = self.get_status()
+        status["pairs_active"] = [self._pair] if self._subscribed else []
+        status["pairs_failed"] = (
+            []
+            if self._subscribed
+            else ([self._pair] if self._state == "DEGRADED" else [])
         )
+        payload = json.dumps(status, indent=2)
 
         fd, tmp_path = tempfile.mkstemp(
             dir=str(self.heartbeat_path.parent),

@@ -12,11 +12,17 @@ INVARIANTS:
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from execution_rail.broker_protocol import ExitResult, OrderResult
-from execution_rail.halt_types import HaltChecker
+from execution_rail.broker_protocol import (
+    CloseFillEvent,
+    FillEvent,
+    OrderIntent,
+    PositionSnapshot,
+)
+from execution_rail.halt_types import HaltChecker, HaltSignaler
 from execution_rail.position import Position, PositionState
 
 from .client_id import ClientIdRole, allocate_client_id
@@ -41,12 +47,16 @@ class IBPaperAdapter:
         if config.mode != IBKRMode.PAPER:
             raise ValueError(f"IBPaperAdapter requires PAPER mode, got {config.mode}")
         self._halt = halt_signal
-        self._halt_signaler = halt_signal if hasattr(halt_signal, "signal_local") else None
-        self._config = config
-        self._config.client_id = allocate_client_id(ClientIdRole.BROKER)
+        self._halt_signaler = (
+            halt_signal if isinstance(halt_signal, HaltSignaler) else None
+        )
+        self._config = replace(config, client_id=allocate_client_id(ClientIdRole.BROKER))
         self._fill_timeout = fill_timeout_sec or config.fill_timeout_sec
-        self._client = RealIBKRClient(self._config)
         self._supervisor = supervisor
+        self._client = RealIBKRClient(
+            self._config,
+            on_disconnect=self._handle_disconnect,
+        )
         self._positions: dict[str, Position] = {}
         self._quantities: dict[str, float] = {}
         self._counter = 0
@@ -58,6 +68,13 @@ class IBPaperAdapter:
     def _pulse_heartbeat(self) -> None:
         if self._supervisor and self._supervisor.heartbeat:
             self._supervisor.heartbeat.beat()
+
+    def _handle_disconnect(self) -> None:
+        self._connected = False
+        if self._supervisor:
+            self._supervisor.escalate_halt("IBKR_DISCONNECT")
+        elif self._halt_signaler:
+            self._halt_signaler.signal_local("ib_disconnect", "connection_lost")
 
     def _ensure_connected(self) -> None:
         if self._connected and self._client.connected:
@@ -90,9 +107,19 @@ class IBPaperAdapter:
     @staticmethod
     def _direction_to_side(direction: str, opening: bool) -> IBOrderSide:
         direction = direction.upper()
+        if direction not in {"LONG", "SHORT"}:
+            raise ValueError(f"direction must be LONG or SHORT, got {direction!r}")
         if opening:
             return IBOrderSide.BUY if direction == "LONG" else IBOrderSide.SELL
         return IBOrderSide.SELL if direction == "LONG" else IBOrderSide.BUY
+
+    def submit_intent(self, intent: OrderIntent) -> FillEvent:
+        return self.open_position(
+            intent.symbol,
+            intent.direction,
+            intent.size,
+            intent.entry_price,
+        )
 
     def open_position(
         self,
@@ -100,21 +127,23 @@ class IBPaperAdapter:
         direction: str,
         size: float,
         entry_price: float,
-    ) -> OrderResult:
+    ) -> FillEvent:
         self._check_halt()
+        direction = direction.upper()
+        side = self._direction_to_side(direction, opening=True)
         self._ensure_connected()
         self._pulse_heartbeat()
 
         ib_order = IBOrder(
             symbol=symbol,
-            side=self._direction_to_side(direction, opening=True),
+            side=side,
             quantity=size,
         )
         result = self._client.submit_order(ib_order, self._fill_timeout)
         self._pulse_heartbeat()
 
         if not result.success or result.status != IBOrderStatus.FILLED:
-            return OrderResult(
+            return FillEvent(
                 success=False,
                 position_id=None,
                 fill_price=result.fill_price,
@@ -127,7 +156,7 @@ class IBPaperAdapter:
         position = Position(
             position_id=position_id,
             symbol=symbol,
-            direction=direction.upper(),
+            direction=direction,
             size=size,
         )
         fill_price = result.fill_price or entry_price
@@ -135,7 +164,7 @@ class IBPaperAdapter:
         self._positions[position_id] = position
         self._quantities[position_id] = size
 
-        return OrderResult(
+        return FillEvent(
             success=True,
             position_id=position_id,
             fill_price=fill_price,
@@ -146,11 +175,11 @@ class IBPaperAdapter:
         position_id: str,
         exit_price: float,
         reason: str = "exit",
-    ) -> ExitResult:
+    ) -> CloseFillEvent:
         self._check_halt()
         position = self._positions.get(position_id)
         if position is None:
-            return ExitResult(
+            return CloseFillEvent(
                 success=False,
                 position_id=position_id,
                 exit_price=0.0,
@@ -170,7 +199,7 @@ class IBPaperAdapter:
         self._pulse_heartbeat()
 
         if not result.success:
-            return ExitResult(
+            return CloseFillEvent(
                 success=False,
                 position_id=position_id,
                 exit_price=0.0,
@@ -180,7 +209,7 @@ class IBPaperAdapter:
 
         close_price = result.fill_price or exit_price
         position.close(close_price, reason)
-        return ExitResult(
+        return CloseFillEvent(
             success=True,
             position_id=position_id,
             exit_price=close_price,
@@ -205,6 +234,15 @@ class IBPaperAdapter:
             account = self._client.get_account()
             unrealized = account.unrealized_pnl
         return {"realized": realized, "unrealized": unrealized, "total": realized + unrealized}
+
+    def snapshot(self) -> PositionSnapshot:
+        pnl = self.get_total_pnl()
+        return PositionSnapshot(
+            positions=[p.to_dict() for p in self._positions.values()],
+            realized=pnl["realized"],
+            unrealized=pnl["unrealized"],
+            total=pnl["total"],
+        )
 
     def disconnect(self) -> None:
         if self._connected:

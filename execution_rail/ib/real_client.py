@@ -10,7 +10,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Callable
 
 from .account import AccountState
 from .config import IBKRConfig, IBKRMode
@@ -31,7 +31,11 @@ class RealClientState:
 class RealIBKRClient:
     """Wraps ib_insync for IB Gateway connectivity."""
 
-    def __init__(self, config: IBKRConfig) -> None:
+    def __init__(
+        self,
+        config: IBKRConfig,
+        on_disconnect: Callable[[], None] | None = None,
+    ) -> None:
         try:
             from ib_insync import IB  # noqa: F401
         except ImportError as exc:
@@ -46,6 +50,8 @@ class RealIBKRClient:
         self._config = config
         self._ib: Any = None
         self._state = RealClientState()
+        self._on_disconnect = on_disconnect
+        self._intentional_disconnect = False
 
     @property
     def connected(self) -> bool:
@@ -78,6 +84,7 @@ class RealIBKRClient:
             self._state.port = self._config.port
             self._state.connected = True
             self._state.gateway_version = self._gateway_version()
+            self._intentional_disconnect = False
 
             valid, error = self._config.validate_account(self._state.account_id)
             if not valid:
@@ -92,12 +99,20 @@ class RealIBKRClient:
 
     def disconnect(self) -> None:
         if self._ib and self._ib.isConnected():
+            self._intentional_disconnect = True
             self._ib.disconnect()
         self._state.connected = False
 
     def _handle_disconnect(self) -> None:
         self._state.connected = False
         logger.warning("IBKR connection lost")
+        if self._intentional_disconnect:
+            return
+        if self._on_disconnect:
+            try:
+                self._on_disconnect()
+            except Exception:
+                logger.exception("IBKR disconnect callback failed")
 
     def _gateway_version(self) -> str:
         try:

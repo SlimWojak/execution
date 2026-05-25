@@ -86,6 +86,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Execution rail — capital path module")
     parser.add_argument("--protocol-check", action="store_true", help="BrokerAdapter + factory smoke")
     parser.add_argument("--health", action="store_true", help="IB Gateway TCP reachability")
+    parser.add_argument("--status", action="store_true", help="Module readiness summary")
     parser.add_argument("--drill-validation", action="store_true", help="Run IB paper validation drill")
     parser.add_argument("--drill-roundtrip", action="store_true", help="Run IB paper round-trip drill")
     args = parser.parse_args()

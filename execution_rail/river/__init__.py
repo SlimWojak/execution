@@ -1,4 +1,8 @@
-"""River ingest — IBKR live streamer, historical writer, schema, seam."""
+"""River ingest — IBKR live streamer, historical writer, schema, seam.
+
+Only schema helpers are re-exported here so importing execution_rail.river stays
+free of IB runtime side effects. Import streamer/writer/supervisor directly.
+"""
 
 from .schema import (
     CANONICAL_PAIRS,
