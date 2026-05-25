@@ -1,0 +1,4 @@
+# Runtime: stdlib only (Brief 1 — BROKER_ADAPTER)
+# Brief 2 adds: ib_insync>=0.9.86
+
+pytest>=8.0
