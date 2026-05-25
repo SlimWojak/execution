@@ -7,11 +7,15 @@ Usage:
     python run.py --protocol-check   # BrokerAdapter + factory smoke
     python run.py --health           # Gateway TCP reachability (paper port)
     python run.py --status           # Module readiness summary
+    python run.py --grant-mode PAPER --reason "..." --grantor "..."
+    python run.py --list-grants [--mode PAPER]
+    python run.py --inspect          # JSON runtime snapshot (gateway probe)
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -82,6 +86,56 @@ def cmd_status() -> None:
     print()
 
 
+def cmd_grant_mode(mode: str, reason: str, grantor: str) -> int:
+    from execution_rail.mode import OperatingMode
+    from execution_rail.mode_promotion import grant_mode
+
+    record = grant_mode(OperatingMode(mode), reason=reason, grantor=grantor)
+    print(json.dumps(record, sort_keys=True))
+    return 0
+
+
+def cmd_list_grants(mode_filter: str | None) -> int:
+    from execution_rail.mode_promotion import grants_path
+
+    path = grants_path()
+    if not path.exists():
+        print("no grants recorded")
+        return 0
+
+    records: list[dict] = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if mode_filter and record.get("mode") != mode_filter:
+                continue
+            records.append(record)
+
+    tail = records[-10:]
+    if not tail:
+        print("no grants recorded")
+        return 0
+
+    for record in tail:
+        print(json.dumps(record, sort_keys=True))
+    return 0
+
+
+def cmd_inspect() -> int:
+    from execution_rail.inspect import inspect_runtime
+
+    status = inspect_runtime(include_gateway=True)
+    print(json.dumps(status, sort_keys=True))
+    gateway = status.get("gateway_reachable") or {}
+    return 0 if gateway.get("passed") else 1
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Execution rail — capital path module")
     parser.add_argument("--protocol-check", action="store_true", help="BrokerAdapter + factory smoke")
@@ -89,8 +143,32 @@ def main() -> None:
     parser.add_argument("--status", action="store_true", help="Module readiness summary")
     parser.add_argument("--drill-validation", action="store_true", help="Run IB paper validation drill")
     parser.add_argument("--drill-roundtrip", action="store_true", help="Run IB paper round-trip drill")
+    parser.add_argument(
+        "--grant-mode",
+        choices=["SHADOW", "PAPER"],
+        help="Record a mode promotion grant (requires --reason and --grantor)",
+    )
+    parser.add_argument("--reason", help="Grant reason (required with --grant-mode)")
+    parser.add_argument("--grantor", help="Grantor identity (required with --grant-mode)")
+    parser.add_argument("--list-grants", action="store_true", help="Show last 10 grants from JSONL ledger")
+    parser.add_argument(
+        "--mode",
+        choices=["SHADOW", "PAPER"],
+        help="Filter --list-grants by mode",
+    )
+    parser.add_argument("--inspect", action="store_true", help="Print JSON runtime snapshot (gateway probe)")
     args = parser.parse_args()
 
+    if args.grant_mode:
+        if not args.reason or not args.grantor:
+            parser.error("--grant-mode requires --reason and --grantor")
+        if not args.reason.strip() or not args.grantor.strip():
+            parser.error("--reason and --grantor must be non-empty")
+        sys.exit(cmd_grant_mode(args.grant_mode, args.reason, args.grantor))
+    if args.list_grants:
+        sys.exit(cmd_list_grants(args.mode))
+    if args.inspect:
+        sys.exit(cmd_inspect())
     if args.protocol_check:
         sys.exit(cmd_protocol_check())
     if args.health:
