@@ -53,6 +53,16 @@ with supervised_paper_session(halt, on_alert=print) as (adapter, sup, wd):
 
 **Policy:** heartbeat recovery does **not** auto-clear halt. Operator inspects state and clears manually.
 
+## Phase 1.5 — Grant PAPER mode (required before broker build)
+
+```bash
+cd ~/execution
+python run.py --grant-mode PAPER --reason "initial paper cutover" --grantor "<your name>"
+python run.py --list-grants --mode PAPER     # confirm written
+```
+
+Without this grant, `build_broker(PAPER, ...)` raises `ModePromotionError`. Factory enforces regardless of caller — no bypass (`INV-MODE-PROMOTION-REQUIRED`).
+
 ## Drills
 
 ```bash

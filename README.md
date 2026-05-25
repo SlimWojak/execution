@@ -262,6 +262,11 @@ source .venv/bin/activate
 pytest                                    # unit + contract
 IBKR_INTEGRATION_TEST=1 pytest tests/integration/ -m integration
 
+# COO operator surface (mode grants + runtime inspect)
+python run.py --grant-mode PAPER --reason "initial paper cutover" --grantor "<name>"
+python run.py --list-grants --mode PAPER
+python run.py --inspect                   # JSON snapshot; exit 1 if gateway down
+
 # supervised broker session (Python)
 from execution_rail.halt_types import LocalHaltSignal
 from execution_rail.ib.session import supervised_paper_session

@@ -2,6 +2,8 @@
 
 River live ingest runs in `execution_rail/river/` and writes to `~/phoenix-river/` (historical path name; owned by execution rail).
 
+**Mode grants:** River is observation-only — it does not require a mode promotion grant. Grants apply to the broker rail only (`build_broker`, `supervised_paper_session`).
+
 ## Relationship to broker (Brief 3)
 
 Both share IB Gateway on `127.0.0.1:4002` with distinct clientIds:
