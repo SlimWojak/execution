@@ -43,9 +43,12 @@ def test_tb01_paper_broker_satisfies_protocol(halt):
     assert isinstance(PaperBroker(halt), BrokerAdapter) is True
 
 
-def test_tb02_build_broker_paper(halt):
+def test_tb02_build_broker_paper(halt, monkeypatch):
+    monkeypatch.setenv("IBKR_MODE", "PAPER")
+    from execution_rail.ib.paper_adapter import IBPaperAdapter
+
     broker = build_broker(OperatingMode.PAPER, halt)
-    assert isinstance(broker, PaperBroker)
+    assert isinstance(broker, IBPaperAdapter)
 
 
 def test_tb03_build_broker_shadow(halt):

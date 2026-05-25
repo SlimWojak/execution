@@ -24,7 +24,8 @@ IB Gateway (127.0.0.1:4002 paper / 4001 live)
 |-------|--------|------|
 | Contract | `broker_protocol.py` | BrokerAdapter Protocol + result types |
 | Factory | `broker_factory.py` | `build_broker(mode, halt)` — sole construction |
-| Paper | `broker_adapter.py` | Immediate-fill PaperBroker |
+| Paper | `broker_adapter.py` | Immediate-fill PaperBroker (TEST/SHADOW) |
+| IB Paper | `ib/paper_adapter.py` | Real IB Gateway fills (PAPER mode) |
 | Lifecycle | `position.py` | 5-state FSM + P&L |
 | Halt peer | `halt_types.py` | HaltChecker Protocol (no en1gma import) |
 | Mode | `mode.py` | OperatingMode enum (SW08-compatible values) |
@@ -44,13 +45,16 @@ pip install -e ".[dev]"
 python run.py --status
 python run.py --protocol-check
 python run.py --health          # TCP check on IB Gateway paper port
-pytest
+python drills/ib_paper_validation.py   # manual drill (Gateway required)
+python drills/ib_paper_roundtrip.py    # BUY→SELL round-trip drill
+pytest                          # unit + contract (no Gateway)
+IBKR_INTEGRATION_TEST=1 pytest tests/integration/ -m integration
 ```
 
 ## Brief chain
 
-1. **BROKER_ADAPTER** (this repo) — Protocol + factory + PaperBroker lift
-2. **IB_PAPER_ADAPTER** — lift `phoenix/drills/ibkr_paper_*.py`, add `ib_insync`
+1. **BROKER_ADAPTER** ✓ — Protocol + factory + PaperBroker lift
+2. **IB_PAPER_ADAPTER** ✓ — lift phoenix IB core, IBPaperAdapter, factory PAPER dispatch
 3. **SENTINEL_LIVENESS_UPGRADE** — TCP → API round-trip
 4. **IBC_LIFECYCLE_SUPERVISOR** — wire `~/ibc/local.ibc-gateway.plist`
 5. **IB_LIVE_ADAPTER** — T2-gated live port

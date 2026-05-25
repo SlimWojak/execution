@@ -19,5 +19,9 @@ class HaltChecker(Protocol):
     """Minimal halt-check surface consumed by the execution layer."""
 
     def check(self) -> None:
-        """Raises on halt; returns None otherwise."""
+        """Raises HaltError on halt; returns None otherwise."""
         ...
+
+
+class HaltError(Exception):
+    """Raised when capital action blocked by halt signal."""

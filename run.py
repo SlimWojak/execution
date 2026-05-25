@@ -30,7 +30,7 @@ def cmd_protocol_check() -> int:
     from execution_rail.mode import OperatingMode
 
     halt = _NoHalt()
-    broker = build_broker(OperatingMode.PAPER, halt)
+    broker = build_broker(OperatingMode.TEST, halt)
 
     checks = [
         ("isinstance PaperBroker", isinstance(broker, PaperBroker)),
@@ -76,7 +76,7 @@ def cmd_status() -> None:
     print("=" * 40)
     print(f"  version: {__version__}")
     print(f"  broker: PaperBroker (BrokerAdapter Protocol)")
-    print(f"  ib_paper_adapter: pending (Brief 2)")
+    print(f"  ib_paper_adapter: landed (PAPER mode → real IB Gateway)")
     print(f"  ib_live_adapter:  pending (T2 ceremony)")
     print(f"  gateway: {config.IB_GATEWAY_HOST}:{config.IB_GATEWAY_PORT_PAPER} (paper)")
     print()
@@ -86,7 +86,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Execution rail — capital path module")
     parser.add_argument("--protocol-check", action="store_true", help="BrokerAdapter + factory smoke")
     parser.add_argument("--health", action="store_true", help="IB Gateway TCP reachability")
-    parser.add_argument("--status", action="store_true", help="Module readiness summary")
+    parser.add_argument("--drill-validation", action="store_true", help="Run IB paper validation drill")
+    parser.add_argument("--drill-roundtrip", action="store_true", help="Run IB paper round-trip drill")
     args = parser.parse_args()
 
     if args.protocol_check:
@@ -96,6 +97,12 @@ def main() -> None:
     if args.status:
         cmd_status()
         return
+    if args.drill_validation:
+        from drills.ib_paper_validation import main as drill_main
+        sys.exit(0 if drill_main() else 1)
+    if args.drill_roundtrip:
+        from drills.ib_paper_roundtrip import main as drill_main
+        sys.exit(0 if drill_main() else 1)
 
     parser.print_help()
 
