@@ -2,32 +2,60 @@
 
 | Field | Value |
 |---|---|
-| Version | 0.3.0 |
+| Version | 0.4.0 |
 | Brief 1 | BROKER_ADAPTER ✓ |
 | Brief 2 | IB_PAPER_ADAPTER ✓ |
 | Brief 3 | IB_CONNECTION_SUPERVISOR ✓ |
-| Brief 4 prep | `docs/BRIEF.MODULE.RIVER_IBKR_STREAMER.PREP.md` |
+| Brief 4 | RIVER_IBKR_STREAMER ✓ |
+| Brief 5 | IBC_LIFECYCLE_SUPERVISOR — pending |
+| Brief 6 | IB_LIVE_ADAPTER — pending (T2-gated) |
 
-## Two-layer IB resilience
+## Broker chain (self-contained)
 
-| Layer | Module | Role |
-|-------|--------|------|
-| 1 — IBC | `~/ibc/` + runbook templates | Gateway process lifecycle (launchd) |
-| 2 — Supervisor | `execution_rail/ib/supervisor.py` | In-session heartbeat → halt escalation |
+Ingest, storage layout, broker connection, and trade execution all live in this repo. en1gma consumes `~/phoenix-river/` read-side only; phoenix is source reference.
 
-## New in Brief 3
+## Three-layer resilience
+
+| Layer | Owner | Handles |
+|-------|-------|---------|
+| 1 — IBC + launchd | `~/ibc/` | Gateway dead, login, daily IB restart |
+| 2 — Supervisor | `execution_rail/ib/` + `execution_rail/river/` | Gateway up but API silent |
+| 3 — launchd KeepAlive | river streamer plist | Streamer process crash restart |
+
+## Module inventory
+
+### Brief 3 — `execution_rail/ib/`
 
 - `client_id.py` — RIVER=1, BROKER=2, COO=3, DRILL=99
 - `heartbeat.py` — HeartbeatMonitor (INV-IBKR-FLAKEY-1)
 - `supervisor.py` — IBKRSupervisor + Watchdog
-- `config.py` — ReconnectTracker runtime
-- `session.py` — `supervised_paper_session()` context manager
-- `docs/runbooks/` — IBC activation + plist/keychain templates
+- `config.py` — ReconnectTracker
+- `session.py` — `supervised_paper_session()`
+
+### Brief 4 — `execution_rail/river/`
+
+- `schema.py` — CANONICAL_PAIRS, validators, `get_river_root()`
+- `streamer.py` — live 1m ingest → staging JSONL (clientId 1)
+- `writer.py` — historical backfill → daily parquet (clientId 99)
+- `seam.py` — staging → immutable parquet
+- `supervisor.py` — RiverSupervisor (market-hours gated)
+- `resubscribe.py` — RiverResubscribeTracker
+- `synthetic.py` — deterministic test bars
+- `scripts/start_river_streamer.py` — CLI entry
 
 ## Tests
 
-39 unit/contract pass + 3 integration skipped (env-gated)
+56 unit/contract pass + 5 integration skipped (env-gated)
 
-## Manual activation (Layer 1)
+```bash
+pytest
+IBKR_INTEGRATION_TEST=1 pytest tests/integration/ -m integration
+```
 
-See `docs/runbooks/IB_GATEWAY_OPERATIONS.md`
+## Production activation
+
+See **README.md → Production activation** (Phases 0–4).
+
+Runbooks:
+- `docs/runbooks/IB_GATEWAY_OPERATIONS.md` — Layer 1 IBC
+- `docs/runbooks/RIVER_OPERATIONS.md` — streamer cutover + seam

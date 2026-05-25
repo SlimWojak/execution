@@ -1,22 +1,24 @@
-# IB Gateway Operations — Two-Layer Resilience
+# IB Gateway Operations — Gateway + Supervisor Resilience
 
 ## Layer model
 
 | Layer | Owner | Problem solved |
 |-------|-------|----------------|
-| **1 — IBC + launchd** | OS process | Gateway dead, not logged in, daily IB restart |
-| **2 — IBKRSupervisor** | execution_rail (in-process) | Gateway up but API connection silent |
+| **1 — IBC + launchd** | `~/ibc/` | Gateway dead, not logged in, daily IB restart |
+| **2 — IBKRSupervisor** | `execution_rail/ib/` | Gateway up but broker API connection silent |
+| **2b — RiverSupervisor** | `execution_rail/river/` | Gateway up but bar stream silent (market-hours gated) |
+| **3 — launchd KeepAlive** | river streamer plist | Streamer process crash restart |
 
-Neither layer alone is sufficient. See `INV-IB-TWO-LAYER-RESILIENCE`.
+Layers 1 + 2 are required for broker. River adds 2b + 3. See `INV-IB-TWO-LAYER-RESILIENCE` (extended to River in Brief 4).
 
 ## clientId allocation
 
 | Role | ID | Consumer |
 |------|-----|----------|
-| RIVER | 1 | Brief 4 streamer |
-| BROKER | 2 | IBPaperAdapter |
+| RIVER | 1 | `river/streamer.py` — live bars |
+| BROKER | 2 | `ib/paper_adapter.py` — orders |
 | COO | 3 | Constellation MCP inspect |
-| DRILL | 99 | Manual validation scripts |
+| DRILL | 99 | `river/writer.py`, manual drills |
 
 ## Layer 1 — IBC activation (manual)
 
@@ -59,7 +61,12 @@ python drills/ib_paper_validation.py
 python drills/ib_paper_roundtrip.py
 ```
 
+## River streamer (Brief 4)
+
+River shares this Gateway on clientId=1. Activation and parallel cutover: [`RIVER_OPERATIONS.md`](./RIVER_OPERATIONS.md).
+
 ## Rollback
 
 - **Code:** revert Brief 3 commit — supervisor dormant, adapter works without pulses
 - **IBC:** restore from backup; `launchctl unload ~/ibc/local.ibc-gateway.plist`
+- **River:** `launchctl unload` streamer plist; restart phoenix streamer manually

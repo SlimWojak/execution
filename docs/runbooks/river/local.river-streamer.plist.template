@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.a8ra.execution-river-streamer</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__HOME__/execution/.venv/bin/python</string>
+        <string>__HOME__/execution/scripts/start_river_streamer.py</string>
+        <string>--pair</string>
+        <string>EURUSD</string>
+        <string>--port</string>
+        <string>4002</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__HOME__/execution</string>
+    <key>StandardOutPath</key>
+    <string>__HOME__/execution/logs/river/streamer.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/execution/logs/river/streamer.log</string>
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>RIVER_ROOT</key>
+        <string>__HOME__/phoenix-river</string>
+    </dict>
+</dict>
+</plist>

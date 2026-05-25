@@ -4,13 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "execution-rail"
-version = "0.3.0"
+version = "0.4.0"
 description = "Capital execution rail — BrokerAdapter protocol, paper broker, IB adapters (candidate_C)"
 requires-python = ">=3.12"
 license = {text = "Proprietary"}
 readme = "README.md"
 dependencies = [
     "ib_insync>=0.9.86",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
 ]
 
 [project.optional-dependencies]
