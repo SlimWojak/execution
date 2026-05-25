@@ -1,4 +1,8 @@
-"""Mode-promotion ledger — structural gate for real broker surfaces."""
+"""Mode-promotion ledger — structural gate for real broker surfaces.
+
+JSONL append is per-process-atomic only; concurrent writers on multiple
+machines are not coordinated (single-machine operator assumption).
+"""
 
 from __future__ import annotations
 

@@ -95,13 +95,13 @@ class PaperBroker:
         self._check_halt()
         position = self._positions.get(position_id)
         if position is None:
-            return ExitResult(
+            return CloseFillEvent(
                 success=False, position_id=position_id,
                 exit_price=0.0, realized_pnl=0.0,
                 error=f"not found: {position_id}",
             )
         position.close(exit_price, reason)
-        return ExitResult(
+        return CloseFillEvent(
             success=True, position_id=position_id,
             exit_price=exit_price, realized_pnl=position.realized_pnl,
         )
