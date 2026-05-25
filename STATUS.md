@@ -2,43 +2,32 @@
 
 | Field | Value |
 |---|---|
-| Version | 0.2.0 |
-| Brief 1 | BROKER_ADAPTER — Protocol + factory ✓ |
-| Brief 2 | IB_PAPER_ADAPTER — IBPaperAdapter + ib/ package ✓ |
-| Broker | PaperBroker (TEST/SHADOW), IBPaperAdapter (PAPER) |
-| IB wired | Yes — port 4002 paper via ib_insync |
-| Tests | 23 unit/contract (+ 2 integration env-gated) |
+| Version | 0.3.0 |
+| Brief 1 | BROKER_ADAPTER ✓ |
+| Brief 2 | IB_PAPER_ADAPTER ✓ |
+| Brief 3 | IB_CONNECTION_SUPERVISOR ✓ |
+| Brief 4 prep | `docs/BRIEF.MODULE.RIVER_IBKR_STREAMER.PREP.md` |
 
-## Layout
+## Two-layer IB resilience
 
-```
-execution_rail/
-├── broker_protocol.py / broker_factory.py / broker_adapter.py
-├── position.py / halt_types.py / mode.py / gateway.py
-└── ib/
-    ├── config.py          IBKRConfig + guards
-    ├── orders.py          IBOrder types
-    ├── positions.py       IBPosition types
-    ├── account.py         AccountState
-    ├── real_client.py     sole ib_insync importer
-    └── paper_adapter.py   IBPaperAdapter
-```
+| Layer | Module | Role |
+|-------|--------|------|
+| 1 — IBC | `~/ibc/` + runbook templates | Gateway process lifecycle (launchd) |
+| 2 — Supervisor | `execution_rail/ib/supervisor.py` | In-session heartbeat → halt escalation |
 
-## Activation
+## New in Brief 3
 
-PAPER mode requires IB Gateway on `127.0.0.1:4002` and `.env` per `.env.example`.
+- `client_id.py` — RIVER=1, BROKER=2, COO=3, DRILL=99
+- `heartbeat.py` — HeartbeatMonitor (INV-IBKR-FLAKEY-1)
+- `supervisor.py` — IBKRSupervisor + Watchdog
+- `config.py` — ReconnectTracker runtime
+- `session.py` — `supervised_paper_session()` context manager
+- `docs/runbooks/` — IBC activation + plist/keychain templates
 
-Drills (manual, against live Gateway):
-```bash
-python drills/ib_paper_validation.py
-python drills/ib_paper_roundtrip.py
-```
+## Tests
 
-Integration tests (env-gated):
-```bash
-IBKR_INTEGRATION_TEST=1 pytest tests/integration/ -m integration
-```
+39 unit/contract pass + 3 integration skipped (env-gated)
 
-## en1gma integration
+## Manual activation (Layer 1)
 
-Not wired yet. Import from `execution_rail` when orchestrator brief lands.
+See `docs/runbooks/IB_GATEWAY_OPERATIONS.md`

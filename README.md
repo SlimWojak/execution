@@ -55,7 +55,8 @@ IBKR_INTEGRATION_TEST=1 pytest tests/integration/ -m integration
 
 1. **BROKER_ADAPTER** ✓ — Protocol + factory + PaperBroker lift
 2. **IB_PAPER_ADAPTER** ✓ — lift phoenix IB core, IBPaperAdapter, factory PAPER dispatch
-3. **SENTINEL_LIVENESS_UPGRADE** — TCP → API round-trip
+3. **IB_CONNECTION_SUPERVISOR** ✓ — supervisor, heartbeat, clientId allocator, IBC runbooks
+4. **RIVER_IBKR_STREAMER** — prep in `docs/BRIEF.MODULE.RIVER_IBKR_STREAMER.PREP.md`
 4. **IBC_LIFECYCLE_SUPERVISOR** — wire `~/ibc/local.ibc-gateway.plist`
 5. **IB_LIVE_ADAPTER** — T2-gated live port
 

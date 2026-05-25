@@ -36,9 +36,11 @@ def _result(name: str, passed: bool, details: str = "") -> None:
 
 def validate_guards() -> bool:
     _header("TEST 1: GUARD VALIDATION")
+    from execution_rail.ib.client_id import ClientIdRole, allocate_client_id
     from execution_rail.ib.config import IBKRConfig, IBKRMode
 
     config = IBKRConfig.from_env()
+    config.client_id = allocate_client_id(ClientIdRole.DRILL)
     if config.mode != IBKRMode.PAPER:
         _result("Mode detection", False, f"Expected PAPER, got {config.mode.value}")
         return False
@@ -61,10 +63,12 @@ def validate_guards() -> bool:
 
 def test_connection() -> tuple[bool, object | None]:
     _header("TEST 2: IBKR CONNECTION")
+    from execution_rail.ib.client_id import ClientIdRole, allocate_client_id
     from execution_rail.ib.config import IBKRConfig
     from execution_rail.ib.real_client import RealIBKRClient
 
     config = IBKRConfig.from_env()
+    config.client_id = allocate_client_id(ClientIdRole.DRILL)
     print(f"  Config: host={config.host}, port={config.port}, mode={config.mode.value}")
     client = RealIBKRClient(config)
     try:
@@ -100,7 +104,7 @@ def test_positions(client) -> bool:
 def test_protocol_surface() -> bool:
     _header("TEST 5: BROKERADAPTER SURFACE")
     from execution_rail.broker_protocol import BrokerAdapter
-    from execution_rail.halt_types import HaltChecker
+    from execution_rail.ib.client_id import ClientIdRole, allocate_client_id
     from execution_rail.ib.config import IBKRConfig, IBKRMode
     from execution_rail.ib.paper_adapter import IBPaperAdapter
 
@@ -109,6 +113,7 @@ def test_protocol_surface() -> bool:
             return None
 
     config = IBKRConfig.from_env()
+    config.client_id = allocate_client_id(ClientIdRole.DRILL)
     if config.mode != IBKRMode.PAPER:
         _result("Protocol isinstance", False, "Requires PAPER config")
         return False

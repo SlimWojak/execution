@@ -41,6 +41,7 @@ def _step(name: str, ok: bool, detail: str = "") -> None:
 
 
 def main() -> bool:
+    from execution_rail.ib.client_id import ClientIdRole, allocate_client_id
     from execution_rail.ib.config import IBKRConfig, IBKRMode
     from execution_rail.ib.paper_adapter import IBPaperAdapter
 
@@ -50,6 +51,7 @@ def main() -> bool:
     print("#" * 60)
 
     config = IBKRConfig.from_env()
+    config.client_id = allocate_client_id(ClientIdRole.DRILL)
     if config.mode != IBKRMode.PAPER:
         print(f"  FATAL: IBKR_MODE must be PAPER, got {config.mode.value}")
         return False

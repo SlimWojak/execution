@@ -6,19 +6,26 @@ INVARIANTS:
   INV-IBKR-PAPER-GUARD-1
   INV-IBKR-ACCOUNT-CHECK-1
   INV-IBKR-CLIENT-ISOLATION
+  INV-IBKR-RECONNECT-1
 """
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from execution_rail.broker_protocol import ExitResult, OrderResult
 from execution_rail.halt_types import HaltChecker
 from execution_rail.position import Position, PositionState
 
-from .config import IBKRConfig, IBKRMode
+from .client_id import ClientIdRole, allocate_client_id
+from .config import IBKRConfig, IBKRMode, ReconnectTracker
 from .orders import IBOrder, IBOrderSide, IBOrderStatus
 from .real_client import RealIBKRClient
+
+if TYPE_CHECKING:
+    from .supervisor import IBKRSupervisor
 
 
 class IBPaperAdapter:
@@ -29,13 +36,17 @@ class IBPaperAdapter:
         halt_signal: HaltChecker,
         config: IBKRConfig,
         fill_timeout_sec: float | None = None,
+        supervisor: IBKRSupervisor | None = None,
     ) -> None:
         if config.mode != IBKRMode.PAPER:
             raise ValueError(f"IBPaperAdapter requires PAPER mode, got {config.mode}")
         self._halt = halt_signal
+        self._halt_signaler = halt_signal if hasattr(halt_signal, "signal_local") else None
         self._config = config
+        self._config.client_id = allocate_client_id(ClientIdRole.BROKER)
         self._fill_timeout = fill_timeout_sec or config.fill_timeout_sec
-        self._client = RealIBKRClient(config)
+        self._client = RealIBKRClient(self._config)
+        self._supervisor = supervisor
         self._positions: dict[str, Position] = {}
         self._quantities: dict[str, float] = {}
         self._counter = 0
@@ -44,15 +55,37 @@ class IBPaperAdapter:
     def _check_halt(self) -> None:
         self._halt.check()
 
+    def _pulse_heartbeat(self) -> None:
+        if self._supervisor and self._supervisor.heartbeat:
+            self._supervisor.heartbeat.beat()
+
     def _ensure_connected(self) -> None:
         if self._connected and self._client.connected:
             return
-        if not self._client.connect():
-            raise ConnectionError(
-                f"IB Gateway connection failed — is Gateway running on "
-                f"{self._config.host}:{self._config.port}?"
-            )
-        self._connected = True
+
+        tracker = ReconnectTracker(config=self._config.reconnect)
+        tracker.begin()
+        last_error: Exception | None = None
+
+        while True:
+            try:
+                if self._client.connect():
+                    self._connected = True
+                    tracker.record_success()
+                    return
+            except Exception as exc:
+                last_error = exc
+
+            should_continue, delay = tracker.register_attempt()
+            if not should_continue:
+                if self._halt_signaler:
+                    self._halt_signaler.signal_local(
+                        "ib_reconnect", "max_attempts_exceeded"
+                    )
+                raise ConnectionError(
+                    f"IB Gateway connection failed after reconnect backoff: {last_error}"
+                ) from last_error
+            time.sleep(delay)
 
     @staticmethod
     def _direction_to_side(direction: str, opening: bool) -> IBOrderSide:
@@ -70,6 +103,7 @@ class IBPaperAdapter:
     ) -> OrderResult:
         self._check_halt()
         self._ensure_connected()
+        self._pulse_heartbeat()
 
         ib_order = IBOrder(
             symbol=symbol,
@@ -77,6 +111,8 @@ class IBPaperAdapter:
             quantity=size,
         )
         result = self._client.submit_order(ib_order, self._fill_timeout)
+        self._pulse_heartbeat()
+
         if not result.success or result.status != IBOrderStatus.FILLED:
             return OrderResult(
                 success=False,
@@ -123,6 +159,7 @@ class IBPaperAdapter:
             )
 
         self._ensure_connected()
+        self._pulse_heartbeat()
         quantity = self._quantities.get(position_id, position.size)
         ib_order = IBOrder(
             symbol=position.symbol,
@@ -130,6 +167,8 @@ class IBPaperAdapter:
             quantity=quantity,
         )
         result = self._client.submit_order(ib_order, self._fill_timeout)
+        self._pulse_heartbeat()
+
         if not result.success:
             return ExitResult(
                 success=False,

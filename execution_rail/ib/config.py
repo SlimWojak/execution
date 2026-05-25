@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -27,11 +28,62 @@ class IBKRMode(str, Enum):
 
 @dataclass
 class ReconnectConfig:
-    """Reconnect policy — config only; runtime tracker deferred to supervisor brief."""
-
     max_attempts: int = 3
     backoff_delays: tuple[float, ...] = (5.0, 15.0, 45.0)
     max_time_sec: float = 65.0
+
+    def get_delay(self, attempt: int) -> float:
+        if attempt < len(self.backoff_delays):
+            return self.backoff_delays[attempt]
+        return self.backoff_delays[-1]
+
+
+class ReconnectState(str, Enum):
+    DISCONNECTED = "DISCONNECTED"
+    RECONNECTING = "RECONNECTING"
+    CONNECTED = "CONNECTED"
+    ESCALATED = "ESCALATED"
+
+
+@dataclass
+class ReconnectTracker:
+    """INV-IBKR-RECONNECT-1 — backoff + escalation."""
+
+    config: ReconnectConfig = field(default_factory=ReconnectConfig)
+    state: ReconnectState = ReconnectState.DISCONNECTED
+    attempts: int = 0
+    started_at: datetime | None = None
+    escalated: bool = False
+
+    def begin(self) -> None:
+        self.state = ReconnectState.RECONNECTING
+        self.attempts = 0
+        self.started_at = datetime.now(UTC)
+        self.escalated = False
+
+    def register_attempt(self) -> tuple[bool, float]:
+        """Return (should_continue, delay_sec). False → escalate."""
+        self.attempts += 1
+        if self.started_at:
+            elapsed = (datetime.now(UTC) - self.started_at).total_seconds()
+            if elapsed >= self.config.max_time_sec:
+                self.escalated = True
+                self.state = ReconnectState.ESCALATED
+                return (False, 0.0)
+        if self.attempts >= self.config.max_attempts:
+            self.escalated = True
+            self.state = ReconnectState.ESCALATED
+            return (False, 0.0)
+        return (True, self.config.get_delay(self.attempts - 1))
+
+    def record_success(self) -> None:
+        self.state = ReconnectState.CONNECTED
+        self.attempts = 0
+        self.started_at = None
+        self.escalated = False
+
+    def record_disconnect(self) -> None:
+        self.state = ReconnectState.DISCONNECTED
 
 
 @dataclass
